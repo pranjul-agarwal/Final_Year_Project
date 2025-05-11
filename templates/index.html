@@ -1,0 +1,311 @@
+<!DOCTYPE html> 
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fog Prediction & Regression</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f9f9f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    nav {
+      background: #333;
+      color: #fff;
+      padding: 1em;
+      text-align: center;
+      width: 100%;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+    }
+
+    nav a {
+      color: white;
+      margin: 0 20px;
+      text-decoration: none;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 1.1rem;
+      padding: 6px 12px;
+      border-radius: 4px;
+      transition: background-color 0.3s ease;
+    }
+
+    nav a:hover,
+    nav a.active {
+      background-color: #28a745;
+    }
+
+    .container {
+      max-width: 500px;
+      width: 90%;
+      margin: 30px auto;
+      background: white;
+      padding: 25px 20px 30px 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      display: none;
+      position: relative;
+    }
+
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 18px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 1rem;
+      box-sizing: border-box;
+      transition: border-color 0.3s ease;
+    }
+
+    input:focus, select:focus {
+      border-color: #28a745;
+      outline: none;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #28a745;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-weight: bold;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background: #218838;
+    }
+
+    #result, #regressionResult {
+      margin-top: 18px;
+      font-weight: bold;
+      font-size: 1.15rem;
+      color: #333;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    #historicalImage {
+      max-width: 100%;
+      display: none;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+
+    #imageLabel {
+      position: absolute;
+      top: 350px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.6);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      display: none;
+      font-weight: bold;
+      font-size: 18px;
+    }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      nav a {
+        margin: 0 10px;
+        font-size: 1rem;
+      }
+      .container {
+        max-width: 95%;
+        margin: 15px auto;
+        padding: 20px 15px 25px 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a id="navPrediction" class="active" onclick="showSection('prediction')">CLASSIFICATION</a>
+    <a id="navHistorical" onclick="showSection('historical')">PREDICTION TESTING RESULTS</a>
+    <a id="navRegression" onclick="showSection('regression')">REGRESSION</a>
+  </nav>
+
+  <!-- Prediction Section -->
+  <div class="container" id="prediction-section">
+    <h2>Fog Classification</h2>
+    <input type="text" id="temp" placeholder="Temperature" />
+    <input type="text" id="pm25" placeholder="PM2.5" />
+    <input type="text" id="aqi" placeholder="AQI" />
+    <input type="text" id="pm10" placeholder="PM10" />
+    <input type="text" id="humidity" placeholder="Relative Humidity" />
+    <button onclick="predictFog()">Predict Fog</button>
+    <div id="result"></div>
+  </div>
+
+  <!-- Historical Data Section -->
+  <div class="container" id="historical-section">
+    <h2>Data Analysis Results</h2>
+    <select id="parameterDropdown" onchange="showHistoricalImage()">
+      <option value="">-- Select Parameter --</option>
+      <option value="temperature">Temperature</option>
+      <option value="pm25">PM2.5</option>
+      <option value="aqi">AQI</option>
+      <option value="pm10">PM10</option>
+      <option value="humidity">Relative Humidity</option>
+    </select>
+    <div id="historicalImageContainer" style="margin-top: 20px; position: relative;">
+      <div id="imageLabel"></div>
+      <img id="historicalImage" src="" alt="" />
+    </div>
+  </div>
+
+  <!-- Regression Section -->
+  <div class="container" id="regression-section">
+    <h2>Parameter Prediction using Regression</h2>
+    <input type="file" id="excelFile" accept=".xls,.xlsx" />
+    <select id="regressionParameter">
+      <option value="">-- Select Parameter to Remove --</option>
+      <option value="Temperature(°C)">Temperature</option>
+      <option value="PM 2.5(µg/m³)">PM2.5</option>
+      <option value="AQI">AQI</option>
+      <option value="PM 10(µg/m³)">PM10</option>
+      <option value="Relative_humidity(%)">Relative Humidity</option>
+    </select>
+    <button onclick="uploadAndPredict()">Upload and Predict</button>
+    <div id="regressionResult"></div>
+  </div>
+
+  <script>
+    // Show specific section and update navbar active style
+    function showSection(section) {
+      const sections = ['prediction', 'historical', 'regression'];
+      const navs = ['navPrediction', 'navHistorical', 'navRegression'];
+
+      sections.forEach(sec => {
+        document.getElementById(sec + '-section').style.display = (sec === section) ? 'block' : 'none';
+      });
+
+      navs.forEach(nav => {
+        document.getElementById(nav).classList.remove('active');
+      });
+
+      if(section === 'prediction') document.getElementById('navPrediction').classList.add('active');
+      else if(section === 'historical') document.getElementById('navHistorical').classList.add('active');
+      else if(section === 'regression') document.getElementById('navRegression').classList.add('active');
+
+      // Clear results on section switch
+      document.getElementById('result').innerText = '';
+      document.getElementById('regressionResult').innerText = '';
+      document.getElementById('historicalImage').style.display = 'none';
+      document.getElementById('imageLabel').style.display = 'none';
+    }
+
+    // Default section on page load
+    window.onload = () => showSection('prediction');
+
+    // Predict fog function
+    function predictFog() {
+      const data = {
+        temp: document.getElementById('temp').value,
+        pm25: document.getElementById('pm25').value,
+        aqi: document.getElementById('aqi').value,
+        pm10: document.getElementById('pm10').value,
+        humidity: document.getElementById('humidity').value,
+      };
+
+      fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      })
+      .then(res => res.json())
+      .then(res => {
+        document.getElementById('result').innerText = res.result || 'Error: ' + res.error;
+      })
+      .catch(err => {
+        document.getElementById('result').innerText = 'Error: ' + err.message;
+      });
+    }
+
+    // Show image based on selected parameter in Historical section
+    function showHistoricalImage() {
+      const param = document.getElementById("parameterDropdown").value;
+      const img = document.getElementById("historicalImage");
+      const label = document.getElementById("imageLabel");
+
+      const labels = {
+        temperature: "SVM (ANOVA)",
+        pm25: "SVM (ANOVA)",
+        aqi: "XGBOOST",
+        pm10: "XGBOOST",
+        humidity: "SVM (ANOVA)"
+      };
+
+      if (param) {
+        img.src = `/static/images/${param}.png`;
+        img.alt = labels[param];
+        img.style.display = 'block';
+
+        label.textContent = labels[param];
+        label.style.display = 'block';
+      } else {
+        img.style.display = 'none';
+        label.style.display = 'none';
+      }
+    }
+
+    // Upload Excel file and predict regression values
+    function uploadAndPredict() {
+      const fileInput = document.getElementById('excelFile');
+      const parameter = document.getElementById('regressionParameter').value;
+      const resultDiv = document.getElementById('regressionResult');
+
+      resultDiv.innerText = '';
+      if (!fileInput.files[0]) {
+        alert('Please select an Excel file to upload.');
+        return;
+      }
+      if (!parameter) {
+        alert('Please select a parameter to remove.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('parameter', parameter);
+
+      fetch('/predict_regression', {
+        method: 'POST',
+        body: formData
+      })
+      .then(res => res.json())
+      .then(res => {
+        if (res.error) {
+          resultDiv.innerText = "Error: " + res.error;
+        } else if (res.predictions) {
+          resultDiv.innerText = "Predictions:\n" + res.predictions.join(", ");
+        } else {
+          resultDiv.innerText = "Unknown error occurred.";
+        }
+      })
+      .catch(err => {
+        resultDiv.innerText = 'Error: ' + err.message;
+      });
+    }
+  </script>
+</body>
+</html>
+
